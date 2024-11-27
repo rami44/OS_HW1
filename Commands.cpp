@@ -129,3 +129,23 @@ const std::string &SmallShell::getPrompt() const {
 }
 
 
+// ChPromptCommand
+
+ChPromptCommand::ChPromptCommand(const char *cmd_line) : BuiltInCommand(cmd_line) {}
+
+void Chprompt::execute() {
+    SmallShell& shell = SmallShell::getInstance(); // Get instance of SmallShell
+
+    // Vector for managing arguments
+    std::vector<char*> arguments(COMMAND_MAX_LENGTH, nullptr);
+
+    if (_parseCommandLine(command, arguments.data()) == 1) { // in case of command "chprompt" without arguments
+        shell.setPrompt("smash");
+    } else {
+        shell.setPrompt(arguments[1]);  // Set the prompt to the second argument
+    }
+}
+
+
+ChPromptCommand::~ChPromptCommand() noexcept {}
+
