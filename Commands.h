@@ -2,15 +2,18 @@
 #define SMASH_COMMAND_H_
 
 #include <vector>
+#include <string>
 
 #define COMMAND_MAX_LENGTH (200)
 #define COMMAND_MAX_ARGS (20)
 
 class Command {
+protected:
+    const char* command;
     // TODO: Add your data members
 public:
     Command(const char *cmd_line);
-
+    const char* getCommand() const {return command;};
     virtual ~Command();
 
     virtual void execute() = 0;
@@ -22,19 +25,24 @@ public:
 
 class BuiltInCommand : public Command {
 public:
-    BuiltInCommand(const char *cmd_line);
+    BuiltInCommand(const char *cmd_line) :Command(cmd_line){};
 
     virtual ~BuiltInCommand() {
     }
+    
+    virtual void execute() override {
+            //  specific to each built-in commands
+        }
 };
 
 class ChpromptCommand : public BuiltInCommand {
+public:
 
     ChpromptCommand(const char* cmd_line);
 
-    virtual ~ChpromptCommand();
+    virtual ~ChpromptCommand() {};
 
-    void execute() override;
+    virtual void execute() override;
 };
 
 
@@ -71,6 +79,10 @@ public:
 };
 
 class ChangeDirCommand : public BuiltInCommand {
+private:
+    char** lastPath;
+
+public:
     // TODO: Add your data members public:
     ChangeDirCommand(const char *cmd_line, char **plastPwd);
 
@@ -103,11 +115,12 @@ public:
 class JobsList;
 
 class QuitCommand : public BuiltInCommand {
+	JobsList *jobs;
+public:
     // TODO: Add your data members public:
     QuitCommand(const char *cmd_line, JobsList *jobs);
 
-    virtual ~QuitCommand() {
-    }
+    virtual ~QuitCommand() {}
 
     void execute() override;
 };
@@ -116,23 +129,42 @@ class QuitCommand : public BuiltInCommand {
 class JobsList {
 public:
     class JobEntry {
+        int jobId;
+        std::string command;
+        pid_t processId;
+        bool isRunning;
+        
+    public:
+        JobEntry(int id, const std::string& cmd,pid_t pid):jobId(id), command(cmd), processId(pid), isRunning(true) {}
+        int getID() const { return jobId; }
+        pid_t getProcessId() { return processId; }
+        std::string getEntryCommand() const { return command; }
+                bool get_isRunning() const { return isRunning; }
+                void set_isRunning(bool status) { isRunning = status; }
+                void finish() { isRunning = false; }
+        
+        
+        
         // TODO: Add your data members
     };
+//job class's external data members
+		std::vector<JobEntry*> jobs_vector;
+        JobEntry *maxJob;
 
+        int nextJobID = 1;
+    
     // TODO: Add your data members
 public:
-    JobsList();
+    JobsList(){};
 
     ~JobsList();
 
-    void addJob(Command *cmd, bool isStopped = false);
+   void addJob(const std::string& command, pid_t pid);
 
     void printJobsList();
 
-    void killAllJobs();
-
     void removeFinishedJobs();
-
+    
     JobEntry *getJobById(int jobId);
 
     void removeJobById(int jobId);
@@ -140,6 +172,12 @@ public:
     JobEntry *getLastJob(int *lastJobId);
 
     JobEntry *getLastStoppedJob(int *jobId);
+    
+    JobEntry* getMaxJob() { return maxJob; }
+    
+    void updateMaxJob();
+    
+    void killAllJobs();
 
     // TODO: Add extra methods or modify exisitng ones as needed
 };
@@ -147,7 +185,7 @@ public:
 class JobsCommand : public BuiltInCommand {
     // TODO: Add your data members
 public:
-    JobsCommand(const char *cmd_line, JobsList *jobs);
+    JobsCommand(const char *cmd_line);
 
     virtual ~JobsCommand() {
     }
@@ -157,6 +195,7 @@ public:
 
 class KillCommand : public BuiltInCommand {
     // TODO: Add your data members
+    JobsList *jobs;
 public:
     KillCommand(const char *cmd_line, JobsList *jobs);
 
@@ -168,8 +207,10 @@ public:
 
 class ForegroundCommand : public BuiltInCommand {
     // TODO: Add your data members
+     JobsList* jobs;
+
 public:
-    ForegroundCommand(const char *cmd_line, JobsList *jobs);
+    ForegroundCommand(const char *cmd_line, JobsList* jobs);
 
     virtual ~ForegroundCommand() {
     }
@@ -232,25 +273,39 @@ public:
 class SmallShell {
 private:
     // TODO: Add your data members
-
+    
+    static SmallShell* instance;
+    
     std::string shell_prompt;
 
-    JobList* jobs_list;
+    JobsList* jobs_list;
+    
+    char* lastPath;
+   
 
     //std::vector<std::string> aliases;
 
-    SmallShell(); // singleton
+    SmallShell(){
+        shell_prompt="smash> ";
+        jobs_list=new JobsList();
+        lastPath=nullptr;
+        
+    } // singleton (private constructor)
 
 public:
+	pid_t smash_pid;
+	pid_t current_pid;
+    int current_job_id;
+
     Command *CreateCommand(const char *cmd_line);
 
     SmallShell(SmallShell const &) = delete; // disable copy ctor
     void operator=(SmallShell const &) = delete; // disable = operator
     static SmallShell &getInstance() // make SmallShell singleton
     {
-        static SmallShell instance; // Guaranteed to be destroyed.
-        // Instantiated on first use.
-        return instance;
+        if (!instance)
+            instance = new SmallShell();
+                return *instance;
     }
 
     ~SmallShell();
@@ -259,9 +314,18 @@ public:
 
     // TODO: add extra methods as needed
 
-    void setPrompt(const std::string prompt); // set prompt
+    void setPrompt(const std::string& prompt); // set prompt
 
     const std::string &getPrompt() const; // get prompt
+    void setLastPath(const char* path);
+    char* getLastPath() const;
+    char** getLastPathAddress() {
+        return &lastPath;
+    }
+    
+    JobsList& getJobsList();
+        
+    
 };
 
 
