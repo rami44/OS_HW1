@@ -47,6 +47,7 @@ public:
 
 
 class ExternalCommand : public Command {
+	
 public:
     ExternalCommand(const char *cmd_line);
 
@@ -69,11 +70,15 @@ public:
 
 class RedirectionCommand : public Command {
     // TODO: Add your data members
+    char* output_file;
+    char* cmd;
+    bool override;
 public:
     explicit RedirectionCommand(const char *cmd_line);
 
-    virtual ~RedirectionCommand() {
-    }
+    virtual ~RedirectionCommand() {}
+    
+    void RedirectionCommandAux(std::ofstream& output);
 
     void execute() override;
 };
@@ -142,8 +147,6 @@ public:
                 bool get_isRunning() const { return isRunning; }
                 void set_isRunning(bool status) { isRunning = status; }
                 void finish() { isRunning = false; }
-        
-        
         
         // TODO: Add your data members
     };
