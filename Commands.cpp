@@ -1,12 +1,22 @@
 #include <unistd.h>
 #include <string.h>
 #include <iostream>
+#include <iostream>   // For std::cout, std::cerr
+#include <streambuf>  // For std::streambuf
+#include <unistd.h>
+#include <fcntl.h>
 #include <vector>
 #include <sstream>
 #include <sys/wait.h>
 #include <iomanip>
 #include "Commands.h"
 #include <string>
+#include <sys/types.h>
+#include <sys/syscall.h>
+//#include <dirent.h>
+#include <unistd.h>
+#include <cstring>
+#include <algorithm>
 
 using namespace std;
 
@@ -138,7 +148,10 @@ SmallShell* SmallShell::instance = nullptr;
         
         string first = cmd_s.substr(0, cmd_s.find_first_of(" \n"));
 
-        if (first == "chprompt") {
+		if(strstr(cmd_line, ">") != nullptr || strstr(cmd_line, ">>") != nullptr) {
+			return new RedirectionCommand(cmd_line);
+		}
+        else if (first == "chprompt") {
             return new ChpromptCommand(cmd_line);
         }
         else if (first=="showpid" || first=="showpid&"){ 
@@ -162,7 +175,12 @@ SmallShell* SmallShell::instance = nullptr;
         else if (first=="kill") {
 			return new KillCommand(cmd_line, jobs_list);
 		}
-		
+		else if (first=="whoami") {
+			return new WhoAmICommand(cmd_line);
+		}
+		else if(first=="listdir") {
+			return new ListDirCommand(cmd_line);
+		}
 		else {
 			return new ExternalCommand(cmd_line);
 		}
@@ -174,7 +192,6 @@ SmallShell* SmallShell::instance = nullptr;
 ExternalCommand::ExternalCommand(const char* cmd_line) : Command(cmd_line) {}
 
 void ExternalCommand::execute() {
-
     pid_t pid = fork();
     if (pid < 0) {
         perror("smash error: fork failed");
@@ -182,7 +199,8 @@ void ExternalCommand::execute() {
     }
 	bool isBackground;
 	
-    char* tmp = strdup(command); // Duplicate the command string
+    char* tmp = new char[COMMAND_MAX_ARGS];
+    strcpy(tmp, command);
     
     if (_isBackgroundComamnd(tmp)) {
 		isBackground = true;
@@ -199,9 +217,11 @@ void ExternalCommand::execute() {
         if (setpgrp() == -1) { // Create a new process group
             perror("smash error: setpgrp failed");
             delete[] argv;
+            delete[] tmp;
             free(tmp);
             exit(1);
         }
+        
        
         // Check for complex commands (wildcards: * or ?)
         if (string(command).find('*') != string::npos || string(command).find('?') != string::npos) {
@@ -209,25 +229,28 @@ void ExternalCommand::execute() {
             if (execv(bashDir, complex_argv) == -1) {
                 perror("smash error: execv failed");
                 delete[] argv;
+                delete[] tmp;
                 free(tmp);
                 exit(1);
             }
         } else { // Simple command
-            if (execvp(argv[0], argv) == -1) {
+            if (execvp(argv[0], argv) == -1) { // result is printed to terminal
                 perror("smash error: execvp failed");
                 delete[] argv;
+                delete[] tmp;
                 free(tmp);
-                exit(1);
+                exit(0);
             }
+
         }
 
     } else { // Parent process
-        SmallShell& smash = SmallShell::getInstance();
-        
-        std::string command_string = std::string(tmp);
-        
-        if (!isBackground) {
 
+      		std::string command_string = std::string(tmp);
+			SmallShell& smash = SmallShell::getInstance();
+
+        if (!isBackground) {
+        
             smash.current_pid = pid; // Update current running PID
             int status = 0;
 
@@ -239,7 +262,7 @@ void ExternalCommand::execute() {
             smash.getJobsList().addJob(command_string, pid);
         }
     }
-
+    
     delete[] argv;
     free(tmp);
 
@@ -253,7 +276,9 @@ void SmallShell::executeCommand(const char *cmd_line) {
     // cmd->execute();
     // Please note that you must fork smash process for some commands (e.g., external commands....)
   
+	jobs_list->removeFinishedJobs();
     std::string temp = cmd_line;
+            
     Command* command = CreateCommand(temp.c_str());
     if (command) {
         command->execute();
@@ -300,9 +325,6 @@ void JobsList:: addJob(const std::string& command, pid_t pid) {
     }
 void JobsList::removeFinishedJobs() {
         
-    
-   
-        
         for (auto it = jobs_vector.begin(); it != jobs_vector.end(); ) {
             
             if (!(*it)->get_isRunning()) {
@@ -342,8 +364,6 @@ void JobsList::printJobsList() {
 
 
 
-
-
 // Command Constructor
 Command::Command( const char *cmd_line) : command(cmd_line) {
   
@@ -355,17 +375,72 @@ Command::~Command() {
 }
 
 
+/////////////////////SPECIAL COMMANDS ////////////////////////
 
+RedirectionCommand::RedirectionCommand( const char *cmd_line) : Command(cmd_line)
+ {
+	std::vector<char *> arguments(COMMAND_MAX_LENGTH, nullptr);
+	
+	_parseCommandLine(command, arguments.data());
+	
+	cmd = new char[COMMAND_MAX_ARGS];
+	output_file = new char[COMMAND_MAX_ARGS];
+	
+	string cmd_string = _trim(string(command));
+	string subCommand = _trim(cmd_string.substr(0, cmd_string.find_first_of(">")));
+	string file_string = _trim(cmd_string.substr(cmd_string.find_last_of(">")+ 1, cmd_string.length() - 1));
+	
+	strcpy(cmd, subCommand.c_str());
+	strcpy(output_file, file_string.c_str());
+	
+	if(cmd_string.find(">>") != string::npos) {
+		override = false;
+	}
+	else {
+		override = true;
+	}
+}
 
+void RedirectionCommand::execute() {
+	SmallShell& smash = SmallShell::getInstance();
+		
+	int original_stdout = dup(STDOUT_FILENO);
 
+	int fd;
+    if (!override) {
+		fd = open(output_file, O_WRONLY | O_CREAT | O_APPEND, 0644);
+    } else {
+        fd = open(output_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    }
 
+        if (fd == -1) {
+            perror("smash error: failed to open output file");
+            exit(1);
+        }
 
+        // Redirect the child's stdout to the file
+        if (dup2(fd, STDOUT_FILENO) == -1) {
+            perror("smash error: failed to redirect stdout");
+            close(fd);
+            exit(1);
+        }
+
+        close(fd); // Close the file descriptor
+      
+  		smash.executeCommand(cmd);
+			
+		// Restore stdout to its original state (terminal)
+		if (dup2(original_stdout, STDOUT_FILENO) == -1) {
+        perror("Failed to restore stdout");
+                    exit(1);
+
+		}
+		close(original_stdout); // The original stdout file descriptor is no longer needed
+	}
+		
 
 
 //----------------------Build_In_Commands---------------------------//
-
-
-
 
 
 
@@ -393,7 +468,6 @@ void ChpromptCommand::execute() {
         // Set new prompt to the first argument
         SmallShell::getInstance().setPrompt(args[1]);
       
-        
     }
 
 
@@ -670,6 +744,185 @@ void KillCommand::execute() {
 }
 
 
-	
+// whoamI
 
+WhoAmICommand::WhoAmICommand(const char* cmd_line): Command(cmd_line) {}
+
+void WhoAmICommand::execute() {
+    uid_t uid = getuid(); // Get the current user's UID
+    
+    
+    int fd = open("/etc/passwd", O_RDONLY);
+    if (fd < 0) {
+        const char* error_msg = "smash error: open failed\n";
+        write(STDERR_FILENO, error_msg, strlen(error_msg));
+        return;
+    }
+
+    char buffer[120000];
+    ssize_t bytes_read;
+    std::string line;
+    std::string username, home_dir;
+
+    // Read and process /etc/passwd
+    while ((bytes_read = read(fd, buffer, sizeof(buffer))) > 0) {
+        for (ssize_t i = 0; i < bytes_read; ++i) {
+            if (buffer[i] == '\n') {
+                // Parse the line when a full line is read
+                                
+                size_t user_end = line.find(':');  // Find the end of the username
+               
+                size_t uid_start = line.find(':', user_end + 1) + 1;  // Start of the UID
+                size_t uid_end = line.find(':', uid_start);  // End of the UID
+               
+				size_t x = line.find(':', uid_end+1);
+                
+                size_t home_start = line.find(':',  x + 1) + 1;  // Start of the home directory
+                size_t home_end = line.find(':', home_start + 1);  // End of the home directory
+
+                // Ensure the line is correctly parsed
+                if (user_end != std::string::npos && uid_start != std::string::npos && uid_end != std::string::npos && home_start != std::string::npos) {
+                    uid_t line_uid = std::stoi(line.substr(uid_start, uid_end - uid_start));  // Extract UID
+                    
+                 // Check if the UID matches the current user's UID
+                    if (line_uid == uid) {
+                        username = line.substr(0, user_end);  // Extract username
+                        home_dir = line.substr(home_start, home_end - home_start);  // Extract home directory
+                        break;  // Found the matching user, break out of the loop
+                    }
+                }
+
+                line.clear();  // Reset line for the next read
+            } else {
+                line += buffer[i];  // Append the current character to the line
+            }
+        }
+
+        if (!username.empty()) {
+            break;  // Exit if the username was found
+        }
+    }
+
+    close(fd);
+
+    // If no username was found, output error
+    if (username.empty()) {
+        write(STDERR_FILENO, "smash error: user not found\n", 28);
+        return;
+    }
+    
+    // Output the username and home directory
+    std::string output = username + " " + home_dir + "\n";
+    write(STDOUT_FILENO, output.c_str(), output.length());
+}
+
+
+////////////////////////LISTDIR////////////////////////////////////////
+
+
+ListDirCommand::ListDirCommand(const char *cmd_line) : Command(cmd_line) {}
+
+
+struct linux_dirent
+{
+    unsigned long d_ino;
+    off_t d_off;
+    unsigned short d_reclen;
+    char d_name[];
+};
+
+void sort_vectors(vector<string>& vec) {
+    sort(vec.begin(), vec.end());
+}
+
+void list_directory_recursive(const string& path, int depth) {
+    const size_t BUF_SIZE = 4096;
+    char buf[BUF_SIZE];
+    
+    struct linux_dirent *d;
+    
+    int fd;
+    fd = open(path.c_str(), O_RDONLY | O_DIRECTORY);
+
+    if (fd == -1) {
+        perror(("smash error: open failed for " + path).c_str());
+        return;
+    }
+
+    vector<string> files;
+    vector<string> directories;
+
+    // Read directory entries
+    int nread;
+    while ((nread = syscall(SYS_getdents, fd, buf, BUF_SIZE)) > 0) {
+        for (int bpos = 0; bpos < nread;) {
+            d = (struct linux_dirent *)(buf + bpos);
+            char d_type = *(buf + bpos + d->d_reclen - 1);
+            const string name = d->d_name;
+
+            if (!name.empty() && name[0] != '.') {  // Ignore hidden files (starting with '.')
+                if (d_type == 8) {
+                    files.push_back(name);  // Regular file
+                } else if (d_type == 4) {
+                    directories.push_back(name);  // Directory
+                }
+            }
+
+            bpos += d->d_reclen;  // Move to the next directory entry
+        }
+    }
+
+    // Handle potential error from getdents syscall
+    if (nread == -1) {
+        close(fd);
+        perror("smash error: getdents failed");
+        return;
+    }
+
+    close(fd);  // Close the directory descriptor
+
+    // Sort files and directories alphabetically
+    sort_vectors(files);
+    sort_vectors(directories);
+
+    // Print directories first with indentation
+    for (const string& dir_name : directories) {
+        cout << string(depth, '\t') << dir_name << endl;  // Indent with tabs
+        list_directory_recursive(path + "/" + dir_name, depth + 1);  // Recursively list subdirectory
+    }
+
+    // Print files with indentation
+    for (const string& file_name : files) {
+        cout << string(depth, '\t') << file_name << endl;  // Indent with tabs
+    }
+}
+
+void ListDirCommand::execute() {
+	
+    vector<char*> arguments(COMMAND_MAX_LENGTH, nullptr);
+    
+    char* tmp = strdup(command);
+    _removeBackgroundSign(tmp);
+    
+    if (_parseCommandLine(tmp, arguments.data()) > 2) {
+        cerr << "smash error: listdir: too many arguments" << endl;
+        free(tmp);
+        return;
+    }
+	string path;
+	
+	if(_parseCommandLine(tmp, arguments.data()) == 2) {
+		path = arguments[1];
+	}
+	else {
+		path = ".";
+	}
+
+	// using recursion to display files and directories in hierarchial format
+    list_directory_recursive(path, 0);
+
+    free(tmp); 
+}
+
+//////////////END OF LISTDIR//////////////////////////////////////////
 
