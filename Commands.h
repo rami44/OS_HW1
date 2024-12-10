@@ -61,12 +61,14 @@ public:
 };
 
 class PipeCommand : public Command {
-	std::string command1;
-	std::string command2;
-	bool error_flag;
+	std::string leftcommand;
+	std::string rightcommand;
+	bool isStderrRedirected;
     // TODO: Add your data members
 public:
     PipeCommand(const char *cmd_line);
+   
+	static void trim(std::string& str);
 
     virtual ~PipeCommand() {}
 
@@ -292,7 +294,7 @@ private:
     JobsList* jobs_list;
     
     char* lastPath;
-   
+       
 	
     SmallShell() {
         shell_prompt="smash> ";
