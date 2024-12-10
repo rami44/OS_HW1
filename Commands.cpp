@@ -578,14 +578,12 @@ void ExternalCommand::execute() {
     char flag[] = "-c";
 
     char** argv = new char*[COMMAND_MAX_LENGTH]{0};
-    
     _parseCommandLine(tmp, argv);
    
     if (pid == 0) { // Child process
         if (setpgrp() == -1) { // Create a new process group
             perror("smash error: setpgrp failed");
             delete[] argv;
-            delete[] tmp;
             free(tmp);
             exit(1);
         }
@@ -615,8 +613,27 @@ void ExternalCommand::execute() {
       		std::string command_string = std::string(tmp);
 			SmallShell& smash = SmallShell::getInstance();
 
-        if (!isBackground) {
-        
+        if (isBackground) {
+           
+           char* originalCommand = new char[COMMAND_MAX_ARGS];
+            
+           Command* realCommand = new ExternalCommand(
+					alias ? alias : command, 
+					nullptr
+			);
+			strcpy(originalCommand, alias ? alias : command);
+
+			
+            SmallShell& smash = SmallShell::getInstance();
+            
+            smash.getJobsList().addJob(realCommand, pid, originalCommand, false);
+            
+            delete[] argv;
+            free(tmp);
+            return;
+                
+        } 
+        else { // isBackground, add Job
             smash.current_pid = pid; // Update current running PID
             int status = 0;
 
@@ -624,28 +641,9 @@ void ExternalCommand::execute() {
                 perror("smash error: waitpid failed");
             }
             smash.current_pid = -1; // Reset current PID after wait
-        } 
-        else { // isBackground, add Job
-               
-            Command* realCommand;
-            char* origCommand = new char[COMMAND_MAX_ARGS];
-            if(alias){
-                strcpy(origCommand, alias);
-                realCommand = new ExternalCommand(tmp, nullptr);
-            } 
-            else{
-                strcpy(origCommand, command);
-                realCommand = this;
-            }
-                SmallShell& smash = SmallShell::getInstance();
-                smash.getJobsList().addJob(realCommand, pid, origCommand, false);
-                delete[] argv;
-                delete[] tmp;
-                return;
             
            }
         }
-    
 }
 	
  
