@@ -145,6 +145,84 @@ SmallShell* SmallShell::instance = nullptr;
 /////////////////////////////////PIPE/////////////////////////////////
 
 
+//------------------------------PIPE--------------------------------//
+void PipeCommand::trim(std::string& str) {
+    size_t first = str.find_first_not_of(' ');
+    size_t last = str.find_last_not_of(' ');
+    if (first == std::string::npos || last == std::string::npos)
+        str.clear();
+    else
+        str = str.substr(first, (last - first + 1));
+}
+
+
+
+ PipeCommand::PipeCommand(const char *cmd_line) : Command(cmd_line), isStderrRedirected(false) {
+     std::string commandStr(cmd_line);
+        size_t separatorPos = commandStr.find("|");
+        if (separatorPos != std::string::npos) {
+            leftcommand = commandStr.substr(0, separatorPos);
+            rightcommand = commandStr.substr(separatorPos + 1);
+            isStderrRedirected = (commandStr[separatorPos + 1] == '&');
+            if (isStderrRedirected) {
+                // Adjust rightCommand to start after "|&"
+                rightcommand = commandStr.substr(separatorPos + 2);
+            }
+            trim(leftcommand);
+            trim(rightcommand);
+        }
+    }
+
+    
+
+void  PipeCommand::execute()  {
+        int pipefd[2];
+        if (pipe(pipefd) == -1) {
+            perror("smash error: pipe failed");
+            return;
+        }
+
+        pid_t leftPid = fork();
+        if (leftPid == 0) {
+            // Left command runs in the child process
+            close(pipefd[0]); // Close unused read end
+            if (dup2(pipefd[1], isStderrRedirected ? STDERR_FILENO : STDOUT_FILENO) == -1) {
+                perror("smash error: dup2 failed");
+                exit(1);
+            }
+            close(pipefd[1]); // Close the write end after duplicating
+            system(leftcommand.c_str()); // Execute the left command
+            exit(0);
+        } else if (leftPid < 0) {
+            perror("smash error: fork failed");
+            return;
+        }
+
+        pid_t rightPid = fork();
+        if (rightPid == 0) {
+            // Right command runs in the child process
+            close(pipefd[1]); // Close unused write end
+            if (dup2(pipefd[0], STDIN_FILENO) == -1) {
+                perror("smash error: dup2 failed");
+                exit(1);
+            }
+            close(pipefd[0]); // Close the read end after duplicating
+            system(rightcommand.c_str()); // Execute the right command
+            exit(0);
+        } else if (rightPid < 0) {
+            perror("smash error: fork failed");
+            return;
+        }
+
+        // Parent closes both ends and waits for children
+        close(pipefd[0]);
+        close(pipefd[1]);
+        waitpid(leftPid, NULL, 0);
+        waitpid(rightPid, NULL, 0);
+    }
+
+
+
 
 /*
 PipeCommand::PipeCommand(const char *cmd_line) : Command(cmd_line) {
@@ -404,22 +482,19 @@ Command* SmallShell::CreateCommand(const char* cmd_line) {
     strcpy(final_alias, alias_command.c_str());
     
     
- // if(strstr(cmd_line, "|") != nullptr || strstr(cmd_line, "|&") != nullptr){
- //     return new PipeCommand(temp);
- // }
+  if(strstr(cmd_line, "|") != nullptr || strstr(cmd_line, "|&") != nullptr){
+     return new PipeCommand(temp);
+  }
   
   if(strstr(cmd_line, ">") != nullptr || strstr(cmd_line, ">>") != nullptr){
-      return new RedirectionCommand(temp);
+     return new RedirectionCommand(temp);
   }
-
-
-
   if(firstWord == "alias"){
       return new aliasCommand(temp);
   }
   else if (firstWord == "unalias"){
-	return new unaliasCommand(temp);
-}
+	 return new unaliasCommand(temp);
+  }
   else if(firstWord == "chprompt"){
       return new ChpromptCommand(temp);
   }
@@ -710,23 +785,36 @@ void JobsList:: addJob(Command* command, pid_t pid, const char* entryCommand, bo
     maxJob = newJob;
     newJob->set_isRunning(!isStopped);
     }
+
+
+
+
+
 void JobsList::removeFinishedJobs() {
-        
-        for (auto it = jobs_vector.begin(); it != jobs_vector.end(); ) {
-            
-            if (!(*it)->get_isRunning()) {
-                
-                delete *it;
-                it = jobs_vector.erase(it);
-            } else {
-                ++it;  // Move to the next job if current one is still running
-            }
-        }
-    
-
-
-     
+    if(jobs_vector.empty()){
+        maxJob = nullptr;
+        return;
     }
+    int ret = 0;
+    int status = 0;
+
+    for(vector<JobEntry*>::iterator it = jobs_vector.begin(); it!=jobs_vector.end();it++)
+    {
+        ret=waitpid((*it)->getProcessId(),&status,WNOHANG);
+        if(ret==(*it)->getProcessId())
+        {
+            jobs_vector.erase(it);
+            --it;
+        }
+    }
+    if (jobs_vector.empty()){
+        maxJob = nullptr;
+        return;
+    }
+    updateMaxJob();
+}
+
+
 
 
 void JobsList::printJobsList() {
@@ -1044,8 +1132,10 @@ void QuitCommand::execute() {
             int num_of_jobs = deleting_jobs.size();
 
             if (num_of_jobs == 0) { // no jobs to kill
-                exit(0);
+               cout << "smash: sending SIGKILL signal to " << num_of_jobs << " jobs:" << endl;
+               exit(0);
             }
+            
 
             cout << "smash: sending SIGKILL signal to " << num_of_jobs << " jobs:" << endl;
 
@@ -1121,6 +1211,8 @@ void KillCommand::execute() {
         default:
             break; // other signals don't need shell status update
     }
+    	jobs->removeFinishedJobs();
+
     
     if (kill(jobProcessID, signum) == 0) { // If `kill` was successful
 
