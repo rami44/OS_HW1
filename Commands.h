@@ -3,6 +3,7 @@
 
 #include <vector>
 #include <string>
+#include <map>
 
 #define COMMAND_MAX_LENGTH (200)
 #define COMMAND_MAX_ARGS (20)
@@ -47,9 +48,11 @@ public:
 
 
 class ExternalCommand : public Command {
+	private:
+		const char* alias;
 	
 public:
-    ExternalCommand(const char *cmd_line);
+    ExternalCommand(const char *cmd_line, const char* alias);
 
     virtual ~ExternalCommand() {
     }
@@ -58,12 +61,14 @@ public:
 };
 
 class PipeCommand : public Command {
+	std::string command1;
+	std::string command2;
+	bool error_flag;
     // TODO: Add your data members
 public:
     PipeCommand(const char *cmd_line);
 
-    virtual ~PipeCommand() {
-    }
+    virtual ~PipeCommand() {}
 
     void execute() override;
 };
@@ -135,15 +140,18 @@ class JobsList {
 public:
     class JobEntry {
         int jobId;
-        std::string command;
+        Command* job_command;
+        std::string old_command;
         pid_t processId;
         bool isRunning;
         
     public:
-        JobEntry(int id, const std::string& cmd,pid_t pid):jobId(id), command(cmd), processId(pid), isRunning(true) {}
+        JobEntry(int id, Command* cmd, pid_t pid, const char* old_command):
+        jobId(id), old_command(old_command), job_command(cmd), processId(pid) {}
         int getID() const { return jobId; }
         pid_t getProcessId() { return processId; }
-        std::string getEntryCommand() const { return command; }
+        std::string getEntryCommand() const { return old_command; }
+        Command* getOldCommand() const { return job_command; }
                 bool get_isRunning() const { return isRunning; }
                 void set_isRunning(bool status) { isRunning = status; }
                 void finish() { isRunning = false; }
@@ -162,7 +170,7 @@ public:
 
     ~JobsList();
 
-   void addJob(const std::string& command, pid_t pid);
+   void addJob(Command* command, pid_t pid, const char* entryCommand, bool isStopped);
 
     void printJobsList();
 
@@ -285,10 +293,8 @@ private:
     
     char* lastPath;
    
-
-    //std::vector<std::string> aliases;
-
-    SmallShell(){
+	
+    SmallShell() {
         shell_prompt="smash> ";
         jobs_list=new JobsList();
         lastPath=nullptr;
@@ -296,9 +302,22 @@ private:
     } // singleton (private constructor)
 
 public:
+
+
+    std::map<std::string,std::string> aliases;
+
+	std::vector<std::string> insertion_order;
+	
 	pid_t smash_pid;
 	pid_t current_pid;
     int current_job_id;
+    
+    
+    bool isAlias(const std::string& alias) const {
+		return aliases.find(alias) != aliases.end();
+	}
+	
+	std::string processBackgroundCommand(char* cmd);
 
     Command *CreateCommand(const char *cmd_line);
 
