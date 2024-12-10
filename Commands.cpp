@@ -639,7 +639,6 @@ void ExternalCommand::execute() {
             }
                 SmallShell& smash = SmallShell::getInstance();
                 smash.getJobsList().addJob(realCommand, pid, origCommand, false);
-                //smash.printJobsVector();
                 delete[] argv;
                 delete[] tmp;
                 return;
