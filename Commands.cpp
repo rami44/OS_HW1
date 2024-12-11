@@ -1049,6 +1049,7 @@ void ForegroundCommand::execute()  {
         return;
     }
     
+    // num_arguments in {1,2}
     
     int job_id;
     
@@ -1060,7 +1061,13 @@ void ForegroundCommand::execute()  {
 		}
 		jobs->updateMaxJob();
         job_id = jobs->getMaxJob()->getID();
-    } else { // fg # 
+    } 
+    else { // fg # 
+		if(!isNumber(args[1])) { // id not a  number
+			std::cerr << "smash error: fg: invalid arguments" << std::endl;
+			return;
+		}
+			
         job_id = std::stoi(args[1]);
 	}
         if (jobs->getJobById(job_id) == nullptr) {
@@ -1098,6 +1105,7 @@ void ForegroundCommand::execute()  {
 	jobs->removeJobById(job_id);
 
     delete[] args;
+    return;
 }    
 
 
@@ -1145,8 +1153,9 @@ void QuitCommand::execute() {
 
             jobs->killAllJobs();
         }
-        exit(0);
     }
+    
+    exit(0);
 }
 
 // KillCommand 8
