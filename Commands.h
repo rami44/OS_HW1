@@ -332,6 +332,7 @@ public:
                 return *instance;
     }
 
+
     ~SmallShell();
 
     void executeCommand(const char *cmd_line);
