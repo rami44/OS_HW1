@@ -6,20 +6,23 @@
 using namespace std;
 
 void ctrlCHandler(int sig_num) {
-
-    SmallShell& smash = SmallShell::getInstance();
-
-    cout << "smash: got ctrl-C" << endl;
+	
+    SmallShell &smash = SmallShell::getInstance();
     
-    if (smash.current_pid!= -1) {
-        pid_t fgProcess = smash.current_pid;
-           
-        if (kill(fgProcess, SIGKILL) == 0) {
-             cout << "smash: process " << fgProcess << " was killed" << endl;
-        } else {
-             perror("smash error: kill failed");
+    std::cout << "smash: got ctrl-C" << std::endl;
+
+    if(smash.current_pid != -1)
+    {
+        cout << "smash: process " << smash.current_pid <<" was killed" << endl;
+        if(kill(smash.current_pid,SIGKILL)){
+            perror("smash error: kill failed");
+            return;
         }
+
         smash.current_pid = -1;
         smash.current_job_id = -1;
     }
+    return;
 }
+
+
