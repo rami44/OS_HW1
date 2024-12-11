@@ -511,7 +511,7 @@ Command* SmallShell::CreateCommand(const char* cmd_line) {
       return new JobsCommand(temp);  //WAIT
   }
   else if(firstWord == "fg") {
-      return new ForegroundCommand(temp, jobs_list);  //80% DONE
+      return new ForegroundCommand(temp, jobs_list);
   }
   else if(firstWord == "quit"){
       return new QuitCommand(temp, jobs_list); //DONE
@@ -1018,7 +1018,9 @@ void ChangeDirCommand::execute()  {
 
 //-----------------------jobs command---------------------------//
 
-JobsCommand::JobsCommand(const char* cmd_line) : BuiltInCommand(cmd_line) {}
+JobsCommand::JobsCommand(const char* cmd_line) : BuiltInCommand(cmd_line) {
+	 SmallShell&  smash = SmallShell::getInstance();
+	}
 void JobsCommand:: execute()  {
     SmallShell& shell = SmallShell::getInstance();
         shell.getJobsList().removeFinishedJobs();
@@ -1029,7 +1031,7 @@ void JobsCommand:: execute()  {
 
 ForegroundCommand::ForegroundCommand(const char* cmd_line, JobsList* jobs) 
     : BuiltInCommand(cmd_line), jobs(jobs) {}
-    
+
 void ForegroundCommand::execute()  {
 
 	char **args= new char* [COMMAND_MAX_LENGTH]{0};
@@ -1046,35 +1048,26 @@ void ForegroundCommand::execute()  {
         std::cerr << "smash error: fg: invalid arguments" << std::endl;
         return;
     }
-
-    // if joblist is empty, print an error message
-    if (jobs->jobs_vector.empty()) {
+    
+    
+    int job_id;
+    
+    if (num_of_arguments == 1) { // only fg
+		if (jobs->jobs_vector.empty()) {
         std::cerr << "smash error: fg: jobs list is empty" << std::endl;
         delete[] args;
         return;
-    }
-
-    int job_id;
-
-    // If the job-id argument is not specified, then the job with maximal job-id is the job to be brought to the foreground
-    if (num_of_arguments == 1) {
+		}
 		jobs->updateMaxJob();
         job_id = jobs->getMaxJob()->getID();
-    } else {
-        try {
-            job_id = std::stoi(args[1]);
-        } catch (const std::invalid_argument &e) {
-            std::cerr << "smash error: fg: invalid job-id" << std::endl;
-            return;
-        }
-    }
-
-    // if the job-id is not found in the job list, print an error message
-    if (jobs->getJobById(job_id) == nullptr) {
-        std::cerr << "smash error: fg: job-id " << job_id << " does not exist" << std::endl;
-        return;
-    }
-
+    } else { // fg # 
+        job_id = std::stoi(args[1]);
+	}
+        if (jobs->getJobById(job_id) == nullptr) {
+			std::cerr << "smash error: fg: job-id " << job_id << " does not exist" << std::endl;
+			return;
+		}
+    
 
     JobsList::JobEntry *job = jobs->getJobById(job_id); // get desired job object
 
@@ -1092,15 +1085,22 @@ void ForegroundCommand::execute()  {
     shell.current_pid = pid;
     shell.current_job_id = job_id;
 
+	
 	std::string Mycommand = job->getEntryCommand();
     // Print the command line of the job along with its process id
     std::cout << Mycommand << " " << pid << std::endl;
     
+	if(waitpid(pid, nullptr, WUNTRACED) == -1) {
+		perror("smash error: waitpid failed");
+		delete[] args;
+        return;
+    }    
 	jobs->removeJobById(job_id);
 
     delete[] args;
+}    
 
-}
+
 
 QuitCommand::QuitCommand(const char *cmd_line, JobsList *jobs) : 
 		BuiltInCommand(cmd_line), jobs(jobs) {}
@@ -1187,14 +1187,13 @@ void KillCommand::execute() {
     pid_t jobProcessID = receiving_Job->getProcessId();
 
     // get signal number to become negative
-    int signum = std::stoi(arguments[1]);
+    int signum = std::abs(std::stoi(arguments[1]));  
     
-    signum *= (-1);
-
     // SIGCONT and SIGSTOP
     switch (signum) {
         case SIGCONT: // If the signal is SIGCONT (continue)
             if (!receiving_Job->get_isRunning()) { // If the job is stopped
+				
                 smash.current_job_id = job_id;
                 smash.current_pid = jobProcessID;
                 jobs->removeJobById(job_id); // Remove job from the list as it's resumed
@@ -1433,6 +1432,7 @@ aliasCommand::aliasCommand(const char *cmd_line): BuiltInCommand(cmd_line) { }
 void aliasCommand::execute() {
     SmallShell& shell = SmallShell::getInstance();
     char** args = new char*[COMMAND_MAX_ARGS];
+    
     int num_args = _parseCommandLine(command, args); // Parse the command line arguments
 
     // Case 1: No arguments – print all aliases
