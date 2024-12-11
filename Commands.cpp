@@ -34,14 +34,38 @@ const std::string WHITESPACE = " \n\r\t\f\v";
 #define FUNC_EXIT()
 #endif
 
+#include <string>
+#include <stdexcept>
+
+
 bool isNumber(char *arg) {
     try {
-        stoi(arg);
+        std::stoi(arg);  // Convert the string to an integer
     } catch (...) {
-        return false;
+        return false;  // If an exception occurs, the argument is not a valid number
     }
-    return true;
+    return true;  // If no exception, the argument is a valid number
 }
+
+bool isNumberPositive(char *arg) {
+    try {
+        int num = std::stoi(arg);  // Convert the string to an integer
+        return num > 0;  // Return true if the number is positive
+    } catch (...) {
+        return false;  // If an exception occurs, it's not a valid positive number
+    }
+}
+
+
+bool isNumberNegative(char *arg) {
+	try {
+        int num = std::stoi(arg);  // Convert the string to an integer
+        return num < 0;  // Return true if the number is positive
+    } catch (...) {
+        return false;  // If an exception occurs, it's not a valid positive number
+    }
+}
+
 
 
 string _ltrim(const std::string &s) {
@@ -155,7 +179,7 @@ void PipeCommand::trim(std::string& str) {
         str = str.substr(first, (last - first + 1));
 }
 
-
+/*
 
  PipeCommand::PipeCommand(const char *cmd_line) : Command(cmd_line), isStderrRedirected(false) {
      std::string commandStr(cmd_line);
@@ -170,6 +194,7 @@ void PipeCommand::trim(std::string& str) {
             }
             trim(leftcommand);
             trim(rightcommand);
+
         }
     }
 
@@ -224,7 +249,12 @@ void  PipeCommand::execute()  {
 
 
 
-/*
+*/
+
+
+
+
+///////REF
 PipeCommand::PipeCommand(const char *cmd_line) : Command(cmd_line) {
 	string str(cmd_line);
 	
@@ -402,7 +432,7 @@ void PipeCommand::execute() {
     }
 }
 
-*/
+
 /////////////////////////////END-PIPE/////////////////////////////////
 
 std::string SmallShell::processBackgroundCommand(char* cmd) {
@@ -425,7 +455,7 @@ Command* SmallShell::CreateCommand(const char* cmd_line) {
     }
 
     std::string alias_command;
-    char* cmd = new char[COMMAND_MAX_ARGS];
+    char* cmd = new char[COMMAND_MAX_LENGTH];
     strcpy(cmd, cmd_line);
 
     
@@ -434,7 +464,7 @@ Command* SmallShell::CreateCommand(const char* cmd_line) {
 	}
 
     std::string cmd_s = _trim(std::string(cmd));
-    char** args = new char*[COMMAND_MAX_ARGS]{nullptr}; // Initialize to nullptr
+    char** args = new char*[COMMAND_MAX_LENGTH]{nullptr}; // Initialize to nullptr
     int len = _parseCommandLine(cmd, args);
     bool is_Alias = false;
 
@@ -445,7 +475,7 @@ Command* SmallShell::CreateCommand(const char* cmd_line) {
         
         std::string command = aliases.find(args[0])->second; // Get actual command for alias
 
-        char** inner_arguments = new char*[COMMAND_MAX_ARGS]{nullptr};
+        char** inner_arguments = new char*[COMMAND_MAX_LENGTH]{nullptr};
         int inner_len = _parseCommandLine(command.c_str(), inner_arguments);
 
         if (inner_len >= 2) {
@@ -476,12 +506,13 @@ Command* SmallShell::CreateCommand(const char* cmd_line) {
     }
 
     // Allocate final command strings
-    char* temp = new char[COMMAND_MAX_ARGS];
-    char* final_alias = new char[COMMAND_MAX_ARGS];
+    char* temp = new char[COMMAND_MAX_LENGTH];
+    char* final_alias = new char[COMMAND_MAX_LENGTH];
     strcpy(temp, cmd_s.c_str());
     strcpy(final_alias, alias_command.c_str());
     
-    
+   
+
   if(strstr(cmd_line, "|") != nullptr || strstr(cmd_line, "|&") != nullptr){
      return new PipeCommand(temp);
   }
@@ -525,8 +556,8 @@ Command* SmallShell::CreateCommand(const char* cmd_line) {
   else if(firstWord == "whoami"){
       return new WhoAmICommand(temp);
   }
-  else{
-    return new ExternalCommand(temp, is_Alias ? final_alias : nullptr);
+  else {
+    return new ExternalCommand(cmd_line, is_Alias ? final_alias : nullptr);
   }
 
 	for (int i = 0; i < len; i++) {
@@ -641,7 +672,7 @@ void ExternalCommand::execute() {
     }
 	bool isBackground;
 	
-    char* tmp = new char[COMMAND_MAX_ARGS];
+    char* tmp = new char[COMMAND_MAX_LENGTH];
     strcpy(tmp, command);
     
     if (_isBackgroundComamnd(tmp)) {
@@ -690,7 +721,7 @@ void ExternalCommand::execute() {
 
         if (isBackground) {
            
-           char* originalCommand = new char[COMMAND_MAX_ARGS];
+           char* originalCommand = new char[COMMAND_MAX_LENGTH];
             
            Command* realCommand = new ExternalCommand(
 					alias ? alias : command, 
@@ -844,6 +875,7 @@ Command::Command( const char *cmd_line) : command(cmd_line) {
   
 }
 
+
 // Virtual destructor
 Command::~Command() {
     
@@ -889,15 +921,15 @@ void RedirectionCommand::execute() {
     }
 
         if (fd == -1) {
-            perror("smash error: failed to open output file");
-            exit(1);
+            perror("smash error: open failed");
+            return;
         }
 
         // Redirect the child's stdout to the file
         if (dup2(fd, STDOUT_FILENO) == -1) {
             perror("smash error: failed to redirect stdout");
             close(fd);
-            exit(1);
+            return;
         }
 
         close(fd); // Close the file descriptor
@@ -906,8 +938,8 @@ void RedirectionCommand::execute() {
 			
 		// Restore stdout to its original state (terminal)
 		if (dup2(original_stdout, STDOUT_FILENO) == -1) {
-        perror("Failed to restore stdout");
-                    exit(1);
+			perror("Failed to restore stdout");
+              exit(1);
 
 		}
 		close(original_stdout); // The original stdout file descriptor is no longer needed
@@ -926,30 +958,30 @@ ChpromptCommand::ChpromptCommand(const char* cmd_line) : BuiltInCommand(cmd_line
 
 
 void ChpromptCommand::execute() {
-   // std::cout << "Executing ChpromptCommand" << std::endl;
-   
-    char **args=new char* [COMMAND_MAX_ARGS];
-    	
-    char* tmp = strdup(command); // Duplicate the command string
 
-	_removeBackgroundSign(tmp);
-	
-	int numArgs = _parseCommandLine(tmp, args);
-	   
+    char **args = new char*[COMMAND_MAX_LENGTH];
+
+    char *tmp = strdup(command); // Duplicate command string
+    _removeBackgroundSign(tmp);
+
+    int numArgs = _parseCommandLine(tmp, args);
+
     if (numArgs == 1) {
-        //  no arguments default
         SmallShell::getInstance().setPrompt("smash");
     } else {
-        // Set new prompt to the first argument
         SmallShell::getInstance().setPrompt(args[1]);
-      
     }
-
 
     for (int i = 0; i < numArgs; ++i) {
-       delete(args[i]);
+        if (args[i]) {
+            delete[] args[i];
+        }
     }
+    delete[] args;
+    free(tmp);
 }
+
+
 
 //------------------------showpid command---------------------//
 
@@ -1063,7 +1095,7 @@ void ForegroundCommand::execute()  {
         job_id = jobs->getMaxJob()->getID();
     } 
     else { // fg # 
-		if(!isNumber(args[1])) { // id not a  number
+		if(!isNumberPositive(args[1])) { // id not a  number
 			std::cerr << "smash error: fg: invalid arguments" << std::endl;
 			return;
 		}
@@ -1152,10 +1184,12 @@ void QuitCommand::execute() {
             }
 
             jobs->killAllJobs();
+            exit(0);
         }
-    }
-    
-    exit(0);
+	}
+	else {
+		exit(0);
+	}
 }
 
 // KillCommand 8
@@ -1180,9 +1214,17 @@ void KillCommand::execute() {
         std::cerr << "smash error: kill: invalid arguments" << std::endl;
         return;
     }
+    
+    
+    if(!isNumberPositive(arguments[2]) || !isNumberNegative(arguments[1])) { // invalid job id
+		 std::cerr << "smash error: kill: invalid arguments" << std::endl;
+		 return;
 
+	}	
+    
     // job id does not exist
     int job_id = std::stoi(arguments[2]);
+    
     JobsList::JobEntry *job = jobs->getJobById(job_id);
     if (job == nullptr) {
         std::cerr << "smash error: kill: job-id " << job_id << " does not exist" << std::endl;
