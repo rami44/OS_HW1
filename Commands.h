@@ -8,6 +8,7 @@
 #define COMMAND_MAX_LENGTH (200)
 #define COMMAND_MAX_ARGS (20)
 
+
 class Command {
 protected:
     const char* command;
@@ -61,9 +62,10 @@ public:
 };
 
 class PipeCommand : public Command {
-	std::string leftcommand;
-	std::string rightcommand;
+	std::string command1;
+	std::string command2;
 	bool isStderrRedirected;
+	bool error_flag;
     // TODO: Add your data members
 public:
     PipeCommand(const char *cmd_line);
@@ -331,7 +333,6 @@ public:
             instance = new SmallShell();
                 return *instance;
     }
-
 
     ~SmallShell();
 
