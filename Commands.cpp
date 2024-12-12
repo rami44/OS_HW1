@@ -463,42 +463,48 @@ Command* SmallShell::CreateCommand(const char* cmd_line) {
 		remaining = processBackgroundCommand(cmd);
 	}
 
-    std::string cmd_s = _trim(std::string(cmd));
+ 	std::string command;
+    
     char** args = new char*[COMMAND_MAX_LENGTH]{nullptr}; // Initialize to nullptr
     int len = _parseCommandLine(cmd, args);
     bool is_Alias = false;
+    std::string cmd_s = _trim(string(cmd));
 
     std::string firstWord;
+    
     if (isAlias(args[0])) {
         is_Alias = true;
         alias_command = args[0]; // Store alias name
         
-        std::string command = aliases.find(args[0])->second; // Get actual command for alias
+        command = aliases.find(args[0])->second; // Get actual command for alias
 
         char** inner_arguments = new char*[COMMAND_MAX_LENGTH]{nullptr};
         int inner_len = _parseCommandLine(command.c_str(), inner_arguments);
-
-        if (inner_len >= 2) {
-            firstWord = inner_arguments[0];
-            cmd_s = command; // Full alias command
-        } else {
+               
             firstWord = std::string(inner_arguments[0]);
-            cmd_s = firstWord;
+
             for (int i = 1; i < len; i++) {
                 alias_command += " ";
-                cmd_s += " ";
-                cmd_s += std::string(args[i]);
+                command += " ";
+                command += std::string(args[i]);
                 alias_command += std::string(args[i]);
-            }
+            
         }
-
+        
+		cmd_s = command;
+		//std::cout << "cmd_s:" << cmd_s << std::endl; // actual command
         for (int i = 0; i < inner_len; i++) {
             delete[] inner_arguments[i];
         }
     } 
+    // not alias
     else {
-        firstWord = std::string(cmd_line).substr(0, cmd_s.find_first_of(" \n"));
+		firstWord = std::string(cmd_line).substr(0, cmd_s.find_first_of(" \n"));
     }
+    
+    // add not alias commands
+    
+    
 
     if (_isBackgroundComamnd(cmd_line)) {
         cmd_s += remaining; 
@@ -511,7 +517,12 @@ Command* SmallShell::CreateCommand(const char* cmd_line) {
     strcpy(temp, cmd_s.c_str());
     strcpy(final_alias, alias_command.c_str());
     
-   
+    std::string firstword = _trim(std::string(firstWord));
+    
+    //std::cout << "temp:" << temp << std::endl; // actual command
+    //std::cout << "final_alias:" << final_alias << std::endl; // aliased maybe
+        //std::cout << "firstword:" << firstword << std::endl; // aliased maybe
+
 
   if(strstr(cmd_line, "|") != nullptr || strstr(cmd_line, "|&") != nullptr){
      return new PipeCommand(temp);
@@ -520,44 +531,45 @@ Command* SmallShell::CreateCommand(const char* cmd_line) {
   if(strstr(cmd_line, ">") != nullptr || strstr(cmd_line, ">>") != nullptr){
      return new RedirectionCommand(temp);
   }
-  if(firstWord == "alias"){
+  if(firstword == "alias"){
       return new aliasCommand(temp);
   }
-  else if (firstWord == "unalias"){
+  else if (firstword == "unalias"){
 	 return new unaliasCommand(temp);
   }
-  else if(firstWord == "chprompt"){
+  else if(firstword == "chprompt"){
       return new ChpromptCommand(temp);
   }
-  else if(firstWord == "showpid"){
+  else if(firstword == "showpid"){
       return new ShowPidCommand(temp); //DONE
   }
-  else if(firstWord == "pwd"){
+  else if(firstword == "pwd"){
       return new GetCurrDirCommand(temp); //DONE
   }
-  else if(firstWord == "cd"){
+  else if(firstword == "cd"){
       return new ChangeDirCommand(temp, SmallShell::getInstance().getLastPathAddress()); //DONE
   }
-  else if(firstWord == "jobs"){
+  else if(firstword == "jobs"){
       return new JobsCommand(temp);  //WAIT
   }
-  else if(firstWord == "fg") {
+  else if(firstword == "fg") {
       return new ForegroundCommand(temp, jobs_list);
   }
-  else if(firstWord == "quit"){
+  else if(firstword == "quit"){
       return new QuitCommand(temp, jobs_list); //DONE
+      
   }
-  else if(firstWord == "kill"){
+  else if(firstword == "kill"){
       return new KillCommand(temp, jobs_list);  //DONE
   }
-  else if(firstWord == "listdir"){
+  else if(firstword == "listdir"){
       return new ListDirCommand(temp);
   }
-  else if(firstWord == "whoami"){
+  else if(firstword == "whoami"){
       return new WhoAmICommand(temp);
   }
   else {
-    return new ExternalCommand(cmd_line, is_Alias ? final_alias : nullptr);
+    return new ExternalCommand(is_Alias ? temp : cmd_line, is_Alias ? final_alias : nullptr);
   }
 
 	for (int i = 0; i < len; i++) {
@@ -1086,14 +1098,18 @@ void ForegroundCommand::execute()  {
     int job_id;
     
     if (num_of_arguments == 1) { // only fg
-		if (jobs->jobs_vector.empty()) {
-        std::cerr << "smash error: fg: jobs list is empty" << std::endl;
-        delete[] args;
-        return;
+		if (jobs->jobs_vector.empty()) { // jobs_vector is empty
+			std::cerr << "smash error: fg: jobs list is empty" << std::endl;
+			delete[] args;
+			return;
 		}
-		jobs->updateMaxJob();
-        job_id = jobs->getMaxJob()->getID();
+		else { // jobs_vector is not empty
+			jobs->updateMaxJob();
+			job_id = jobs->getMaxJob()->getID();
+		}	
+        
     } 
+    
     else { // fg # 
 		if(!isNumberPositive(args[1])) { // id not a  number
 			std::cerr << "smash error: fg: invalid arguments" << std::endl;
@@ -1466,6 +1482,15 @@ bool validAlias(const string& command){
     return regex_match(command, pattern);
 }
 
+bool validAliasFormat(const string &cmd_str) {
+    size_t equal_pos = cmd_str.find('=');
+    if (equal_pos == std::string::npos) return false;
+
+	return true;
+}
+
+
+
 bool reservedAlias(const string& alias){
     SmallShell& shell = SmallShell::getInstance();
 
@@ -1489,7 +1514,7 @@ void aliasCommand::execute() {
     // Case 1: No arguments – print all aliases
     if (num_args == 1) {
         for (const auto& alias_entry : shell.insertion_order) {
-            std::cout << alias_entry << " = '" << shell.aliases[alias_entry] << "'" << std::endl;
+            std::cout << alias_entry << "='" << shell.aliases[alias_entry] << "'" << std::endl;
         }
         delete[] args;
         return;
@@ -1498,8 +1523,12 @@ void aliasCommand::execute() {
     // Extract alias and original command from the input
     std::string cmd_str = _trim(command);
     size_t equal_pos = cmd_str.find('=');
+    
+   // std::cout << cmd_str << std::endl;
 
-    if (equal_pos == std::string::npos) {
+	// alias name can only include lettes, numbers andunderstonder
+
+    if (!validAlias(cmd_str) || !validAliasFormat(cmd_str)) {
         std::cerr << "smash error: alias: invalid format" << std::endl;
         delete[] args;
         return;
@@ -1517,13 +1546,6 @@ void aliasCommand::execute() {
     // Validation: Check for reserved aliases
     if (reservedAlias(alias_name)) {
         std::cerr << "smash error: alias: '" << alias_name << "' is reserved or already exists" << std::endl;
-        delete[] args;
-        return;
-    }
-
-    // Validation: Check for valid alias format
-    if (!validAlias(cmd_str)) {
-        std::cerr << "smash error: alias: invalid alias name" << std::endl;
         delete[] args;
         return;
     }
