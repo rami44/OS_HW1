@@ -14,7 +14,6 @@
 #include <sys/types.h>
 #include <sys/syscall.h>
 #include <regex>
-//#include <dirent.h>
 #include <unistd.h>
 #include <cstring>
 #include <algorithm>
@@ -168,8 +167,6 @@ SmallShell* SmallShell::instance = nullptr;
 
 /////////////////////////////////PIPE/////////////////////////////////
 
-
-//------------------------------PIPE--------------------------------//
 void PipeCommand::trim(std::string& str) {
     size_t first = str.find_first_not_of(' ');
     size_t last = str.find_last_not_of(' ');
@@ -179,82 +176,6 @@ void PipeCommand::trim(std::string& str) {
         str = str.substr(first, (last - first + 1));
 }
 
-/*
-
- PipeCommand::PipeCommand(const char *cmd_line) : Command(cmd_line), isStderrRedirected(false) {
-     std::string commandStr(cmd_line);
-        size_t separatorPos = commandStr.find("|");
-        if (separatorPos != std::string::npos) {
-            leftcommand = commandStr.substr(0, separatorPos);
-            rightcommand = commandStr.substr(separatorPos + 1);
-            isStderrRedirected = (commandStr[separatorPos + 1] == '&');
-            if (isStderrRedirected) {
-                // Adjust rightCommand to start after "|&"
-                rightcommand = commandStr.substr(separatorPos + 2);
-            }
-            trim(leftcommand);
-            trim(rightcommand);
-
-        }
-    }
-
-    
-
-void  PipeCommand::execute()  {
-        int pipefd[2];
-        if (pipe(pipefd) == -1) {
-            perror("smash error: pipe failed");
-            return;
-        }
-
-        pid_t leftPid = fork();
-        if (leftPid == 0) {
-            // Left command runs in the child process
-            close(pipefd[0]); // Close unused read end
-            if (dup2(pipefd[1], isStderrRedirected ? STDERR_FILENO : STDOUT_FILENO) == -1) {
-                perror("smash error: dup2 failed");
-                exit(1);
-            }
-            close(pipefd[1]); // Close the write end after duplicating
-            system(leftcommand.c_str()); // Execute the left command
-            exit(0);
-        } else if (leftPid < 0) {
-            perror("smash error: fork failed");
-            return;
-        }
-
-        pid_t rightPid = fork();
-        if (rightPid == 0) {
-            // Right command runs in the child process
-            close(pipefd[1]); // Close unused write end
-            if (dup2(pipefd[0], STDIN_FILENO) == -1) {
-                perror("smash error: dup2 failed");
-                exit(1);
-            }
-            close(pipefd[0]); // Close the read end after duplicating
-            system(rightcommand.c_str()); // Execute the right command
-            exit(0);
-        } else if (rightPid < 0) {
-            perror("smash error: fork failed");
-            return;
-        }
-
-        // Parent closes both ends and waits for children
-        close(pipefd[0]);
-        close(pipefd[1]);
-        waitpid(leftPid, NULL, 0);
-        waitpid(rightPid, NULL, 0);
-    }
-
-
-
-
-*/
-
-
-
-
-///////REF
 PipeCommand::PipeCommand(const char *cmd_line) : Command(cmd_line) {
 
     string commandString(cmd_line);
@@ -262,7 +183,6 @@ PipeCommand::PipeCommand(const char *cmd_line) : Command(cmd_line) {
     size_t pipePos;
 
     
-
     if (_isBackgroundComamnd(cmd_line)) {
 
         char tempCmd[COMMAND_MAX_ARGS];
@@ -602,7 +522,6 @@ void ExternalCommand::execute() {
             exit(1);
         }
         
-       
         // Check for complex commands (wildcards: * or ?)
         if (string(command).find('*') != string::npos || string(command).find('?') != string::npos) {
             char* complex_argv[] = {bashDir, flag, tmp, nullptr};
@@ -619,7 +538,6 @@ void ExternalCommand::execute() {
                 free(tmp);
                 exit(0);
             }
-
         }
 
     } else { // Parent process
@@ -637,7 +555,6 @@ void ExternalCommand::execute() {
 			);
 			strcpy(originalCommand, alias ? alias : command);
 
-			
             SmallShell& smash = SmallShell::getInstance();
             
             smash.getJobsList().addJob(realCommand, pid, originalCommand, false);
@@ -706,7 +623,7 @@ JobsList& SmallShell::getJobsList() {
 }
 
 
-//-----------------------job's class funcs------------------------//
+/////////////////job's class funcs///////////////////////
 
 JobsList:: ~JobsList() {
     for (auto job : jobs_vector) delete job;
@@ -862,14 +779,13 @@ void RedirectionCommand::execute() {
 		
 
 
-//----------------------Build_In_Commands---------------------------//
+//////////////////Build_In_Commands/////////////////
 
 
 
-
-//-------------------chprompt command (warm-up)----------------------//
+////////////////Chprompt command (warm-up)//////////
+//
 ChpromptCommand::ChpromptCommand(const char* cmd_line) : BuiltInCommand(cmd_line) {}
-
 
 
 void ChpromptCommand::execute() {
@@ -898,7 +814,7 @@ void ChpromptCommand::execute() {
 
 
 
-//------------------------showpid command---------------------//
+////////////////////showpid command////////////////
 
 
 
@@ -908,7 +824,7 @@ void ShowPidCommand::execute() {
     std::cout << "smash pid is " << getpid() << std::endl;
 }
 
-//--------------------------pwd command------------------------//
+///////////////////pwd command//////////////////////
 
 
 GetCurrDirCommand::GetCurrDirCommand(const char *cmd_line):BuiltInCommand(cmd_line){}
@@ -923,7 +839,7 @@ void GetCurrDirCommand::execute(){
     
 }
 
-//--------------------Change Directory Command---------------------//
+/////////////Change Directory Command//////////////
 
 ChangeDirCommand::ChangeDirCommand(const char *cmd_line, char** lastPath) : BuiltInCommand(cmd_line), lastPath(lastPath) {}
 
@@ -982,7 +898,7 @@ void ChangeDirCommand::execute() {
 }
 
 
-//-----------------------jobs command---------------------------//
+///////////////jobs command////////////////
 
 JobsCommand::JobsCommand(const char* cmd_line) : BuiltInCommand(cmd_line) {}
 
@@ -993,7 +909,7 @@ void JobsCommand:: execute()  {
         shell.getJobsList().printJobsList();
     }
 
-//--------------------------fg command --------------------------//
+///////////fg command//////////////////////
 
 ForegroundCommand::ForegroundCommand(const char* cmd_line, JobsList* jobs) 
     : BuiltInCommand(cmd_line), jobs(jobs) {}
@@ -1112,8 +1028,7 @@ void QuitCommand::execute() {
             if (num_of_jobs == 0) { // no jobs to kill
                cout << "smash: sending SIGKILL signal to " << num_of_jobs << " jobs:" << endl;
                exit(0);
-            }
-            
+            }           
 
             cout << "smash: sending SIGKILL signal to " << num_of_jobs << " jobs:" << endl;
 
@@ -1135,8 +1050,6 @@ void QuitCommand::execute() {
 KillCommand::KillCommand(const char *cmd_line, JobsList *jobs) : BuiltInCommand(cmd_line), jobs(jobs) {}
 
 void KillCommand::execute() {
-
-    // command format: kill -<signum> <job-id>
 
     std::vector<char *> arguments(COMMAND_MAX_LENGTH, nullptr);
     
@@ -1213,7 +1126,6 @@ void KillCommand::execute() {
     }
 }
 
-
 // whoamI
 
 WhoAmICommand::WhoAmICommand(const char* cmd_line): Command(cmd_line) {}
@@ -1286,9 +1198,7 @@ void WhoAmICommand::execute() {
     write(STDOUT_FILENO, output.c_str(), output.length());
 }
 
-
 ////////////////////////LISTDIR////////////////////////////////////////
-
 
 ListDirCommand::ListDirCommand(const char *cmd_line) : Command(cmd_line) {}
 
@@ -1394,12 +1304,11 @@ void ListDirCommand::execute() {
     free(tmp); 
 }
 
-//////////////////END OF LISTDIR//////////////////////////////////////////
+//////////////////END OF LISTDIR////////////////////////////
 
 
 
-
-/////////////////////ALIAS//////////////////////////////////////////////
+/////////////////////ALIAS/////////////////////////////////
 
 bool validAlias(const string& command){
     const regex pattern("^alias [a-zA-Z0-9_]+='[^']*'$");
@@ -1412,7 +1321,6 @@ bool validAliasFormat(const string &cmd_str) {
 
 	return true;
 }
-
 
 
 bool reservedAlias(const string& alias){
@@ -1435,9 +1343,8 @@ void aliasCommand::execute() {
     char** args = new char*[COMMAND_MAX_ARGS];
     
     int num_args = _parseCommandLine(command, args); // Parse the command line arguments
-
-
-	char* tmp = strdup(command);
+	
+    char* tmp = strdup(command);
     _removeBackgroundSign(tmp);
 
 
@@ -1491,10 +1398,7 @@ void aliasCommand::execute() {
 }
 
 
-
-
 // UNALIAS
-
 
 
 unaliasCommand::unaliasCommand(const char *cmd_line) : BuiltInCommand(cmd_line) {}
@@ -1525,12 +1429,7 @@ void unaliasCommand::execute() {
 }
 
 
-
-
-
 // NET INFO
-
-
 
 #include <net/if.h>
 
@@ -1541,9 +1440,7 @@ void unaliasCommand::execute() {
 #include <unistd.h>
 
 
-
 NetInfoCommand::NetInfoCommand(const char* cmd_line) : Command(cmd_line) {}
-
 
 
 #include <sys/ioctl.h>
@@ -1563,7 +1460,6 @@ NetInfoCommand::NetInfoCommand(const char* cmd_line) : Command(cmd_line) {}
 #include <string>
 
 
-
 void NetInfoCommand::execute() {
 
     std::string commandStr = std::string(command);
@@ -1575,12 +1471,9 @@ void NetInfoCommand::execute() {
         std::cerr << "smash error: netinfo: interface not specified\n";
 
         return;
-
     }
 
     std::string interface = commandStr.substr(spacePos + 1);
-
-
 
     int fd = socket(AF_INET, SOCK_DGRAM, 0);
 
@@ -1591,8 +1484,6 @@ void NetInfoCommand::execute() {
         return;
 
     }
-
-
 
     struct ifreq ifr;
 
@@ -1605,9 +1496,7 @@ void NetInfoCommand::execute() {
     // Get IP Address
 
     if (ioctl(fd, SIOCGIFADDR, &ifr) == -1) {
-
-       
-
+   
         std::cerr << "smash error: netinfo: interface " << interface << " does not exist\n";
 
         close(fd);
@@ -1640,11 +1529,7 @@ void NetInfoCommand::execute() {
 
     }
 
-
-
     close(fd);
-
-
 
     // Get Default Gateway
 
@@ -1678,8 +1563,6 @@ void NetInfoCommand::execute() {
 
     }
 
-
-
     // Get DNS Servers
 
     std::ifstream resolv("/etc/resolv.conf");
@@ -1695,8 +1578,6 @@ void NetInfoCommand::execute() {
     }
 
 }
-
-
 
 
 
