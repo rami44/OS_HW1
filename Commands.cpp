@@ -49,7 +49,7 @@ bool isNumber(char *arg) {
 bool isNumberPositive(char *arg) {
     try {
         int num = std::stoi(arg);  // Convert the string to an integer
-        return num > 0;  // Return true if the number is positive
+        return num >= 0;  // Return true if the number is positive
     } catch (...) {
         return false;  // If an exception occurs, it's not a valid positive number
     }
@@ -59,7 +59,7 @@ bool isNumberPositive(char *arg) {
 bool isNumberNegative(char *arg) {
 	try {
         int num = std::stoi(arg);  // Convert the string to an integer
-        return num < 0;  // Return true if the number is positive
+        return num <= 0;  // Return true if the number is positive
     } catch (...) {
         return false;  // If an exception occurs, it's not a valid positive number
     }
@@ -424,7 +424,8 @@ Command* SmallShell::CreateCommand(const char* cmd_line) {
 
  
   // command includes alias and ' so it is an alias command.
-  if(firstword == "alias" && strstr(temp, "'") != nullptr) {
+  if(strstr(temp, "alias") != nullptr && strstr(temp, "'") != nullptr
+      && strstr(temp, "=") != nullptr) {
 	return new aliasCommand(temp);
   }
 
@@ -1094,8 +1095,7 @@ void KillCommand::execute() {
     // SIGCONT and SIGSTOP
     switch (signum) {
         case SIGCONT: // If the signal is SIGCONT (continue)
-            if (!receiving_Job->get_isRunning()) { // If the job is stopped
-				
+            if (!receiving_Job->get_isRunning()) { // If the job is stopped				
                 smash.current_job_id = job_id;
                 smash.current_pid = jobProcessID;
                 jobs->removeJobById(job_id); // Remove job from the list as it's resumed
@@ -1360,6 +1360,8 @@ void aliasCommand::execute() {
     // Extract alias and original command from the input
     std::string cmd_str = _trim(tmp);
     
+    //std::cout << cmd_str << std::endl;
+    
 	    
     size_t equal_pos = cmd_str.find('=');
     
@@ -1482,7 +1484,6 @@ void NetInfoCommand::execute() {
         perror("smash error: socket");
 
         return;
-
     }
 
     struct ifreq ifr;
@@ -1490,8 +1491,6 @@ void NetInfoCommand::execute() {
     memset(&ifr, 0, sizeof(ifr));
 
     strncpy(ifr.ifr_name, interface.c_str(), IFNAMSIZ - 1);
-
-
 
     // Get IP Address
 
@@ -1512,8 +1511,6 @@ void NetInfoCommand::execute() {
     inet_ntop(AF_INET, &ipaddr->sin_addr, ip, sizeof(ip));
 
     std::cout << "IP Address: " << ip << std::endl;
-
-
 
     // Get Subnet Mask
 
@@ -1560,7 +1557,6 @@ void NetInfoCommand::execute() {
             break;
 
         }
-
     }
 
     // Get DNS Servers
@@ -1574,10 +1570,5 @@ void NetInfoCommand::execute() {
             std::cout << "DNS Servers: " << line.substr(11) << std::endl;
 
         }
-
     }
-
 }
-
-
-
