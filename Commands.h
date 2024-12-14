@@ -61,21 +61,37 @@ public:
     void execute() override;
 };
 
+
 class PipeCommand : public Command {
-	std::string command1;
-	std::string command2;
-	bool isStderrRedirected;
-	bool error_flag;
+
+    std::string leftCommand;
+
+        std::string rightCommand;
+
+        bool redirectStderr;
+
     // TODO: Add your data members
+
 public:
+
     PipeCommand(const char *cmd_line);
+
    
-	static void trim(std::string& str);
+
+    static void trim(std::string& str);
+
+
 
     virtual ~PipeCommand() {}
 
+
+
     void execute() override;
+
 };
+
+
+
 
 class RedirectionCommand : public Command {
     // TODO: Add your data members
@@ -145,13 +161,15 @@ public:
     class JobEntry {
         int jobId;
         Command* job_command;
-        std::string old_command;
         pid_t processId;
+
+        std::string old_command;
         bool isRunning;
         
     public:
         JobEntry(int id, Command* cmd, pid_t pid, const char* old_command):
-        jobId(id), old_command(old_command), job_command(cmd), processId(pid) {}
+        jobId(id), job_command(cmd), processId(pid) ,old_command(old_command)  {}
+        
         int getID() const { return jobId; }
         pid_t getProcessId() { return processId; }
         std::string getEntryCommand() const { return old_command; }
@@ -353,6 +371,21 @@ public:
         
     
 };
+
+
+class NetInfoCommand : public Command {
+
+public:
+
+    NetInfoCommand(const char* cmd_line);
+
+    virtual ~NetInfoCommand() {}
+
+    void execute() override;
+
+};
+
+
 
 
 #endif //SMASH_COMMAND_H_
