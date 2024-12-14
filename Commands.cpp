@@ -502,13 +502,12 @@ Command* SmallShell::CreateCommand(const char* cmd_line) {
     //std::cout << "cmd_line:" << cmd_line << std::endl; // aliased maybe
     //std::cout << "firstword:" << firstword << std::endl; // actual command
 
-
-if(strstr(cmd_line, "alias") != nullptr) {
-	if(firstword == "alias") {
-      return new aliasCommand(temp);
+ 
+  // command includes alias and ' so it is an alias command.
+  if(strstr(temp, "alias") != nullptr && strstr(temp, "'") != nullptr) {
+	return new aliasCommand(temp);
   }
-}
-	
+
   if(strstr(temp, "|") != nullptr || strstr(cmd_line, "|&") != nullptr){
      return new PipeCommand(temp);
   }
@@ -569,98 +568,6 @@ if(strstr(cmd_line, "alias") != nullptr) {
   return nullptr;
 }
 
-/*
-Command* SmallShell::CreateCommand(const char* cmd_line) {
-	
-	if(*cmd_line == '\0') { return nullptr; }
-	
-	
-	
-    // Trim and initialize command variables
-    string cmd_s = _trim(string(cmd_line));
-	string firstWord;
-	string alias_command;
-
-	char** arguments = new char*[COMMAND_MAX_ARGS]{0}; // Ensure array is initialized to nullptr
-	int full_length = _parseCommandLine(cmd_line, arguments);
-
-	// Check if the command is an alias
-	auto it = aliases.find(cmd_s.substr(0, cmd_s.find(' '))); // Get the first word of the command
-	if (it != aliases.end()) {
-		std::string command = it->second; // Get the real command for the alias
-
-		int actual_command_length = _parseCommandLine(command.c_str(), arguments);
-
-
-
-		if (actual_command_length == 1) { 
-			// Alias without additional arguments
-			firstWord = command;
-			cmd_s = firstWord;
-		} else {
-			// Alias with additional arguments
-			alias_command = command; // Full alias command
-			firstWord = command.substr(0, command.find(' ')); // Store just the alias name
-			cmd_s = command;
-
-			// Append additional arguments to the aliased command
-			for (int i = 1; i < full_length; i++) {
-				cmd_s += " ";
-				cmd_s += std::string(arguments[i]);
-			}
-		}
-	} 
-	else {
-		// Not an alias, extract the first word of the command
-		firstWord = cmd_s.substr(0, cmd_s.find(' '));
-	}
-
-// Convert cmd_s to a dynamically allocated char*
-	char* cmd = new char[cmd_s.length() + 1]; // +1 for null terminator
-	strcpy(cmd, cmd_s.c_str()); // Copy the string
-
-// Clean up dynamically allocated memory for arguments
-	for (int i = 0; i < full_length; i++) {
-		delete[] arguments[i];
-	}
-	
-	if(strstr(cmd_line, "|") != nullptr || strstr(cmd_line, "|&") != nullptr){
-      return new PipeCommand(cmd_line);
-	}
-    // Redirect to the appropriate Command object
-    if (strstr(cmd_line, ">") != nullptr || strstr(cmd_line, ">>") != nullptr) {
-        return new RedirectionCommand(cmd_line);
-	}
-	
-	std::cout << firstWord << std::endl;
-	
-	if(firstWord=="alias") {
-		return new aliasCommand(cmd);
-    } else if (firstWord == "chprompt") {
-        return new ChpromptCommand(cmd);
-    } else if (firstWord == "showpid" || firstWord == "showpid&") {
-        return new ShowPidCommand(cmd);
-    } else if (firstWord == "pwd" || firstWord == "pwd&") {
-        return new GetCurrDirCommand(cmd);
-    } else if (firstWord == "cd") {
-        return new ChangeDirCommand(cmd, SmallShell::getInstance().getLastPathAddress());
-    } else if (firstWord == "jobs" || firstWord == "jobs&") {
-        return new JobsCommand(cmd);
-    } else if (firstWord == "fg") {
-        return new ForegroundCommand(cmd, jobs_list);
-    } else if (firstWord == "quit") {
-        return new QuitCommand(cmd, jobs_list);
-    } else if (firstWord == "kill") {
-        return new KillCommand(cmd, jobs_list);
-    } else if (firstWord == "whoami") {
-        return new WhoAmICommand(cmd);
-    } else if (firstWord == "listdir") {
-        return new ListDirCommand(cmd);
-    } else {
-        return new ExternalCommand(cmd, nullptr);
-    }
-}
-*/
 
 ExternalCommand::ExternalCommand(const char* cmd_line, const char* alias) : Command(cmd_line), alias(alias) {}
 
@@ -1423,7 +1330,7 @@ void list_directory_recursive(const string& path, int depth) {
             char d_type = *(buf + bpos + d->d_reclen - 1);
             const string name = d->d_name;
 
-            if (!name.empty()) { // including empty files as requested.
+            if (!name.empty() && name != "." && name != "..") {
                 if (d_type == 8) {
                     files.push_back(name);  // Regular file
                 } else if (d_type == 4) {
@@ -1433,6 +1340,7 @@ void list_directory_recursive(const string& path, int depth) {
 
             bpos += d->d_reclen;  // Move to the next directory entry
         }
+        
     }
 
     if (nread == -1) {
