@@ -256,181 +256,153 @@ void  PipeCommand::execute()  {
 
 ///////REF
 PipeCommand::PipeCommand(const char *cmd_line) : Command(cmd_line) {
-	string str(cmd_line);
-	
-	int place;
-	error_flag = false;
-	if(_isBackgroundComamnd(str.c_str())) {
-		char tmp[COMMAND_MAX_ARGS]{0};
-		strcpy(tmp, cmd_line);
-		_removeBackgroundSign(tmp);
-		cmd_line = tmp;
-	}
-	if((place=str.find("|&")) != -1) {
-		command1 = _trim(str.substr(0, place));
-		command2 = _trim(str.substr(place+2,str.length()));
-	}
-	else {
-		if((place=str.find("|")) != -1) {
-			error_flag = true;
-			command1 = _trim(str.substr(0, place));
-			command2 = _trim(str.substr(place+1, str.length()));
-		}
-	}
+
+    string commandString(cmd_line);
+
+    size_t pipePos;
+
+    
+
+    if (_isBackgroundComamnd(cmd_line)) {
+
+        char tempCmd[COMMAND_MAX_ARGS];
+
+        strcpy(tempCmd, cmd_line);
+
+        _removeBackgroundSign(tempCmd);
+
+        commandString = string(tempCmd);
+
+    }
+
+
+
+    pipePos = commandString.find("|&");
+
+    if (pipePos != string::npos) {
+
+        leftCommand = _trim(commandString.substr(0, pipePos));
+
+        rightCommand = _trim(commandString.substr(pipePos + 2));
+
+        redirectStderr = true;  // Handling stderr redirection
+
+    } else {
+
+        pipePos = commandString.find('|');
+
+        if (pipePos != string::npos) {
+
+            leftCommand = _trim(commandString.substr(0, pipePos));
+
+            rightCommand = _trim(commandString.substr(pipePos + 1));
+
+            redirectStderr = false;  // Handling stdout redirection
+
+        }
+
+    }
+
 }
+
+
+
+// Execute method to handle command execution with pipe
 
 void PipeCommand::execute() {
-    char **args = new char *[COMMAND_MAX_ARGS]{0};
-    _parseCommandLine(command, args);
-    int my_pipe[2];
-    pipe(my_pipe);
-    pid_t pid1=fork();
-    if (pid1 <0){
-        if(close(my_pipe [0])==-1)
-        {
-            perror("smash error: close failed");
-        }
-        if(close(my_pipe [1])==-1)
-        {
-            perror("smash error: close failed");
-        }
-        perror("smash error: fork failed");
-        delete [] args;
+
+    int pipefds[2];
+
+    pid_t pid1, pid2;
+
+    int status;
+
+
+
+    if (pipe(pipefds) != 0) {
+
+        perror("smash error: pipe creation failed");
+
         return;
+
     }
-    if(pid1==0){ //child 1
-        if (setpgrp()==-1)
-        {
-            if(close(my_pipe [0])==-1)
-            {
-                perror("smash error: close failed");
-            }
-            if(close(my_pipe [1])==-1)
-            {
-                perror("smash error: close failed");
-            }
-            perror("smash error: setpgrp failed");
-            delete [] args;
-            return;
-        }
-        if(error_flag){ // if |
-            if(close(my_pipe [0])==-1)
-            {
-                perror("smash error: close failed");
-                delete [] args;
-                return;
-            }
-            if (dup2(my_pipe[1],1)==-1){
-                if(close(my_pipe [0])==-1)
-                {
-                    perror("smash error: close failed");
-                }
-                if(close(my_pipe [1])==-1)
-                {
-                    perror("smash error: close failed");
-                }
-                perror("smash error: dup2 failed");
-                delete [] args;
-                return;
-            }
-        }
-        else{ // if |&
-
-            if(close(my_pipe[0])==-1)
-            {
-                perror("smash error: close failed");
-                delete [] args;
-                return;
-            }
-
-            if (dup2(my_pipe[1],2)==-1){
-                if(close(my_pipe [0])==-1)
-                {
-                    perror("smash error: close failed");
-                }
-                if(close(my_pipe [1])==-1)
-                {
-                    perror("smash error: close failed");
-                }
-                perror("smash error: dup2 failed");
-                delete [] args;
-                return;
-            }
-        }
 
 
-        SmallShell  &shell =SmallShell ::getInstance();
-        shell.executeCommand(command1.c_str());
-        delete [] args;
-        exit(0);
-    }
-    pid_t pid2= fork();
-    if (pid2 <0){
-        if(close(my_pipe [0])==-1)
-        {
-            perror("smash error: close failed");
-        }
-        if(close(my_pipe [1])==-1)
-        {
-            perror("smash error: close failed");
-        }
-        perror("smash error: fork failed");
-        delete [] args;
-        return;
-    }
-    if(pid2==0){ //child 2
-        if (setpgrp()==-1)
-        {
-            if(close(my_pipe [0])==-1)
-            {
-                perror("smash error: close failed");
-            }
-            if(close(my_pipe [1])==-1)
-            {
-                perror("smash error: close failed");
-            }
-            perror("smash error: setpgrp failed");
-            delete [] args;
-            return;
-        }
-        if(close(my_pipe[1])==-1)
-        {
-            perror("smash error: close failed");
-            delete [] args;
-            return;
-        }
-        if( dup2(my_pipe[0],0)==-1){
-            if(close(my_pipe [0])==-1)
-            {
-                perror("smash error: close failed");
-            }
+
+    pid1 = fork();
+
+    if (pid1 == 0) {
+
+        setpgrp();
+
+        close(pipefds[0]);
+
+        if (dup2(pipefds[1], redirectStderr ? STDERR_FILENO : STDOUT_FILENO) == -1) {
+
             perror("smash error: dup2 failed");
-            delete [] args;
-            return;
+
+            exit(1);
+
         }
-        SmallShell  &shell =SmallShell ::getInstance();
-        shell.executeCommand(command2.c_str());
-        delete [] args;
+
+        close(pipefds[1]);
+
+        SmallShell::getInstance().executeCommand(leftCommand.c_str());
+
         exit(0);
-    }
-    delete [] args;
-    //closing the pipe for the parent
-    if(close(my_pipe [0])==-1)
-    {
-        perror("smash error: close failed");
-    }
-    if(close(my_pipe [1])==-1)
-    {
-        perror("smash error: close failed");
-    }
-    if (waitpid(pid1,nullptr,WUNTRACED)==-1){
-        perror("smash error: waitpid failed");
-    }
-    if (waitpid(pid2,nullptr,WUNTRACED)==-1){
-        perror("smash error: waitpid failed");
+
+    } else if (pid1 < 0) {
+
+        perror("smash error: fork failed");
+
         return;
+
     }
+
+
+
+    pid2 = fork();
+
+    if (pid2 == 0) {
+
+        setpgrp();
+
+        close(pipefds[1]);
+
+        if (dup2(pipefds[0], STDIN_FILENO) == -1) {
+
+            perror("smash error: dup2 failed");
+
+            exit(1);
+
+        }
+
+        close(pipefds[0]);
+
+        SmallShell::getInstance().executeCommand(rightCommand.c_str());
+
+        exit(0);
+
+    } else if (pid2 < 0) {
+
+        perror("smash error: fork failed");
+
+        return;
+
+    }
+
+
+
+    close(pipefds[0]);
+
+    close(pipefds[1]);
+
+    waitpid(pid1, &status, WUNTRACED);
+
+    waitpid(pid2, &status, WUNTRACED);
+
 }
+
 
 
 /////////////////////////////END-PIPE/////////////////////////////////
@@ -453,14 +425,20 @@ Command* SmallShell::CreateCommand(const char* cmd_line) {
     if (*cmd_line == '\0') {
         return nullptr; 
     }
+    
+    bool isBackground = false;
 
-    std::string alias_command;
     char* cmd = new char[COMMAND_MAX_LENGTH];
     strcpy(cmd, cmd_line);
 
     
+        std::string alias_command = string(cmd);
+
+    
+    
     if (_isBackgroundComamnd(cmd_line)) {
 		remaining = processBackgroundCommand(cmd);
+		isBackground = true;
 	}
 
  	std::string command;
@@ -468,13 +446,14 @@ Command* SmallShell::CreateCommand(const char* cmd_line) {
     char** args = new char*[COMMAND_MAX_LENGTH]{nullptr}; // Initialize to nullptr
     int len = _parseCommandLine(cmd, args);
     bool is_Alias = false;
-    std::string cmd_s = _trim(string(cmd));
+    std::string cmd_s = string(cmd);
+    
+
 
     std::string firstWord;
     
     if (isAlias(args[0])) {
         is_Alias = true;
-        alias_command = args[0]; // Store alias name
         
         command = aliases.find(args[0])->second; // Get actual command for alias
 
@@ -484,10 +463,10 @@ Command* SmallShell::CreateCommand(const char* cmd_line) {
             firstWord = std::string(inner_arguments[0]);
 
             for (int i = 1; i < len; i++) {
-                alias_command += " ";
+                //alias_command += " ";
                 command += " ";
                 command += std::string(args[i]);
-                alias_command += std::string(args[i]);
+                //alias_command += std::string(args[i]);
             
         }
         
@@ -506,9 +485,8 @@ Command* SmallShell::CreateCommand(const char* cmd_line) {
     
     
 
-    if (_isBackgroundComamnd(cmd_line)) {
+    if (isBackground) {
         cmd_s += remaining; 
-        alias_command += remaining;
     }
 
     // Allocate final command strings
@@ -521,17 +499,25 @@ Command* SmallShell::CreateCommand(const char* cmd_line) {
     
     //std::cout << "temp:" << temp << std::endl; // actual command
     //std::cout << "final_alias:" << final_alias << std::endl; // aliased maybe
-        //std::cout << "firstword:" << firstword << std::endl; // aliased maybe
+    //std::cout << "cmd_line:" << cmd_line << std::endl; // aliased maybe
+    //std::cout << "firstword:" << firstword << std::endl; // actual command
 
 
-  if(strstr(cmd_line, "|") != nullptr || strstr(cmd_line, "|&") != nullptr){
+if(strstr(cmd_line, "alias") != nullptr) {
+	if(firstword == "alias") {
+      return new aliasCommand(temp);
+  }
+}
+	
+  if(strstr(temp, "|") != nullptr || strstr(cmd_line, "|&") != nullptr){
      return new PipeCommand(temp);
   }
   
-  if(strstr(cmd_line, ">") != nullptr || strstr(cmd_line, ">>") != nullptr){
+  if(strstr(temp, ">") != nullptr || strstr(cmd_line, ">>") != nullptr){
      return new RedirectionCommand(temp);
   }
-  if(firstword == "alias"){
+  
+  if(firstword == "alias") {
       return new aliasCommand(temp);
   }
   else if (firstword == "unalias"){
@@ -557,13 +543,15 @@ Command* SmallShell::CreateCommand(const char* cmd_line) {
   }
   else if(firstword == "quit"){
       return new QuitCommand(temp, jobs_list); //DONE
-      
   }
   else if(firstword == "kill"){
       return new KillCommand(temp, jobs_list);  //DONE
   }
   else if(firstword == "listdir"){
       return new ListDirCommand(temp);
+  }
+  else if (firstword == "netinfo") {
+	  return new NetInfoCommand(temp);
   }
   else if(firstword == "whoami"){
       return new WhoAmICommand(temp);
@@ -674,7 +662,7 @@ Command* SmallShell::CreateCommand(const char* cmd_line) {
 }
 */
 
-ExternalCommand::ExternalCommand(const char* cmd_line, const char* alias) : alias(alias), Command(cmd_line) {}
+ExternalCommand::ExternalCommand(const char* cmd_line, const char* alias) : Command(cmd_line), alias(alias) {}
 
 void ExternalCommand::execute() {
     pid_t pid = fork();
@@ -682,7 +670,8 @@ void ExternalCommand::execute() {
         perror("smash error: fork failed");
         return;
     }
-	bool isBackground;
+	bool isBackground = false;
+	
 	
     char* tmp = new char[COMMAND_MAX_LENGTH];
     strcpy(tmp, command);
@@ -902,15 +891,22 @@ RedirectionCommand::RedirectionCommand( const char *cmd_line) : Command(cmd_line
 	
 	_parseCommandLine(command, arguments.data());
 	
-	cmd = new char[COMMAND_MAX_ARGS];
-	output_file = new char[COMMAND_MAX_ARGS];
+		
+    char* tmp = strdup(command); // Duplicate the command string
+
+	_removeBackgroundSign(tmp);
 	
-	string cmd_string = _trim(string(command));
+	
+	cmd = new char[COMMAND_MAX_LENGTH];
+	output_file = new char[COMMAND_MAX_LENGTH];
+	
+	string cmd_string = _trim(string(tmp));
 	string subCommand = _trim(cmd_string.substr(0, cmd_string.find_first_of(">")));
 	string file_string = _trim(cmd_string.substr(cmd_string.find_last_of(">")+ 1, cmd_string.length() - 1));
 	
 	strcpy(cmd, subCommand.c_str());
 	strcpy(output_file, file_string.c_str());
+
 	
 	if(cmd_string.find(">>") != string::npos) {
 		override = false;
@@ -1024,47 +1020,66 @@ void GetCurrDirCommand::execute(){
 
 ChangeDirCommand::ChangeDirCommand(const char *cmd_line, char** lastPath) : BuiltInCommand(cmd_line), lastPath(lastPath) {}
 
-void ChangeDirCommand::execute()  {
-        char* args[COMMAND_MAX_ARGS];
-        
-        char* tmp = strdup(command); // Duplicate the command string
+void ChangeDirCommand::execute() {
 
-		_removeBackgroundSign(tmp);
-	
-		int numArgs = _parseCommandLine(tmp, args);
+    char* args[COMMAND_MAX_ARGS];
+    char* tmp = strdup(command); 
 
-        if (numArgs > 2) {
-            std::cerr << "smash error: cd: too many arguments" << std::endl;
+    _removeBackgroundSign(tmp); 
+    int numArgs = _parseCommandLine(tmp, args);
+
+    // Case 1: Too many arguments
+    if (numArgs > 2) {
+        std::cerr << "smash error: cd: too many arguments" << std::endl;
+        free(tmp); // Free the duplicated command string
+        return;
+    }
+
+    // Case 2: No arguments provided
+    if (numArgs == 1) {
+        free(tmp); // Free the duplicated command string
+        return;
+    }
+
+    char currentPath[1024];
+    if (getcwd(currentPath, sizeof(currentPath)) == nullptr) {
+        perror("smash error: getcwd failed");
+        free(tmp); // Free the duplicated command string
+        return;
+    }
+
+    // Determine the new path to change to
+    const char* newPath = args[1]; 
+    if (strcmp(newPath, "-") == 0) {
+        if (*lastPath == nullptr || std::string(*lastPath).empty()) {
+            std::cerr << "smash error: cd: OLDPWD not set" << std::endl;
+            free(tmp); // Free the duplicated command string
+            return;
         } else {
-            const char* newPath = (numArgs == 1 ? "." : args[1]);
-
-            if (strcmp(newPath, "-") == 0) {
-                if (*lastPath == nullptr || std::string(*lastPath).empty()) {
-                    std::cerr << "smash error: cd: OLDPWD not set" << std::endl;
-                } else {
-                    newPath = *lastPath;
-                }
-            }
-
-            char currentPath[1024];
-            if (getcwd(currentPath, sizeof(currentPath)) != nullptr) {
-                if (chdir(newPath) == 0) {
-                    *lastPath = strdup(currentPath);  //update
-                }
-                
-            }
-        }
-
-        for (int i = 0; i < numArgs; ++i) {
-            free(args[i]);
+            newPath = *lastPath; // Use the previous directory
         }
     }
 
+    // Attempt to change directory
+    if (chdir(newPath) == 0) {
+        free(*lastPath);   
+        *lastPath = strdup(currentPath); 
+    } else {
+        perror("smash error: chdir failed");
+    }
+
+    for (int i = 0; i < numArgs; ++i) {
+        free(args[i]);
+    }
+    free(tmp); 
+}
+
+
 //-----------------------jobs command---------------------------//
 
-JobsCommand::JobsCommand(const char* cmd_line) : BuiltInCommand(cmd_line) {
-	 SmallShell&  smash = SmallShell::getInstance();
-	}
+JobsCommand::JobsCommand(const char* cmd_line) : BuiltInCommand(cmd_line) {}
+
+
 void JobsCommand:: execute()  {
     SmallShell& shell = SmallShell::getInstance();
         shell.getJobsList().removeFinishedJobs();
@@ -1280,9 +1295,10 @@ void KillCommand::execute() {
     	jobs->removeFinishedJobs();
 
     
+    cout << "signal number " << signum << " was sent to pid " << jobProcessID << endl;
+
     if (kill(jobProcessID, signum) == 0) { // If `kill` was successful
 
-        cout << "signal number " << signum << " was sent to pid " << jobProcessID << endl;
     } else { // If `kill` failed
 		
         perror("smash error: kill failed"); // Print error if `kill` fails
@@ -1407,7 +1423,7 @@ void list_directory_recursive(const string& path, int depth) {
             char d_type = *(buf + bpos + d->d_reclen - 1);
             const string name = d->d_name;
 
-            if (!name.empty() && name[0] != '.') {
+            if (!name.empty()) { // including empty files as requested.
                 if (d_type == 8) {
                     files.push_back(name);  // Regular file
                 } else if (d_type == 4) {
@@ -1484,7 +1500,7 @@ bool validAlias(const string& command){
 
 bool validAliasFormat(const string &cmd_str) {
     size_t equal_pos = cmd_str.find('=');
-    if (equal_pos == std::string::npos) return false;
+    if (equal_pos == std::string::npos) { return false; }
 
 	return true;
 }
@@ -1506,10 +1522,16 @@ bool reservedAlias(const string& alias){
 aliasCommand::aliasCommand(const char *cmd_line): BuiltInCommand(cmd_line) { }
 
 void aliasCommand::execute() {
+	
     SmallShell& shell = SmallShell::getInstance();
     char** args = new char*[COMMAND_MAX_ARGS];
     
     int num_args = _parseCommandLine(command, args); // Parse the command line arguments
+
+
+	char* tmp = strdup(command);
+    _removeBackgroundSign(tmp);
+
 
     // Case 1: No arguments – print all aliases
     if (num_args == 1) {
@@ -1521,7 +1543,9 @@ void aliasCommand::execute() {
     }
 
     // Extract alias and original command from the input
-    std::string cmd_str = _trim(command);
+    std::string cmd_str = _trim(tmp);
+    
+	    
     size_t equal_pos = cmd_str.find('=');
     
    // std::cout << cmd_str << std::endl;
@@ -1529,7 +1553,7 @@ void aliasCommand::execute() {
 	// alias name can only include lettes, numbers andunderstonder
 
     if (!validAlias(cmd_str) || !validAliasFormat(cmd_str)) {
-        std::cerr << "smash error: alias: invalid format" << std::endl;
+        std::cerr << "smash error: alias: invalid alias format" << std::endl;
         delete[] args;
         return;
     }
@@ -1545,7 +1569,7 @@ void aliasCommand::execute() {
 
     // Validation: Check for reserved aliases
     if (reservedAlias(alias_name)) {
-        std::cerr << "smash error: alias: '" << alias_name << "' is reserved or already exists" << std::endl;
+        std::cerr << "smash error: alias: " << alias_name << " already exists or is a reserved command" << std::endl;
         delete[] args;
         return;
     }
@@ -1594,6 +1618,175 @@ void unaliasCommand::execute() {
 
 
 
+
+
+// NET INFO
+
+
+
+#include <net/if.h>
+
+#include <sys/ioctl.h>
+
+#include <arpa/inet.h>
+
+#include <unistd.h>
+
+
+
+NetInfoCommand::NetInfoCommand(const char* cmd_line) : Command(cmd_line) {}
+
+
+
+#include <sys/ioctl.h>
+
+#include <net/if.h>
+
+#include <netinet/in.h>
+
+#include <arpa/inet.h>
+
+#include <unistd.h>
+
+#include <fstream>
+
+#include <iostream>
+
+#include <string>
+
+
+
+void NetInfoCommand::execute() {
+
+    std::string commandStr = std::string(command);
+
+    std::size_t spacePos = commandStr.find(" ");
+
+    if (spacePos == std::string::npos) {
+
+        std::cerr << "smash error: netinfo: interface not specified\n";
+
+        return;
+
+    }
+
+    std::string interface = commandStr.substr(spacePos + 1);
+
+
+
+    int fd = socket(AF_INET, SOCK_DGRAM, 0);
+
+    if (fd == -1) {
+
+        perror("smash error: socket");
+
+        return;
+
+    }
+
+
+
+    struct ifreq ifr;
+
+    memset(&ifr, 0, sizeof(ifr));
+
+    strncpy(ifr.ifr_name, interface.c_str(), IFNAMSIZ - 1);
+
+
+
+    // Get IP Address
+
+    if (ioctl(fd, SIOCGIFADDR, &ifr) == -1) {
+
+       
+
+        std::cerr << "smash error: netinfo: interface " << interface << " does not exist\n";
+
+        close(fd);
+
+        return;
+
+    }
+
+    struct sockaddr_in* ipaddr = (struct sockaddr_in*)&ifr.ifr_addr;
+
+    char ip[INET_ADDRSTRLEN];
+
+    inet_ntop(AF_INET, &ipaddr->sin_addr, ip, sizeof(ip));
+
+    std::cout << "IP Address: " << ip << std::endl;
+
+
+
+    // Get Subnet Mask
+
+    if (ioctl(fd, SIOCGIFNETMASK, &ifr) != -1) {
+
+        struct sockaddr_in* subnet = (struct sockaddr_in*)&ifr.ifr_netmask;
+
+        char netmask[INET_ADDRSTRLEN];
+
+        inet_ntop(AF_INET, &subnet->sin_addr, netmask, sizeof(netmask));
+
+        std::cout << "Subnet Mask: " << netmask << std::endl;
+
+    }
+
+
+
+    close(fd);
+
+
+
+    // Get Default Gateway
+
+    std::string gateway;
+
+    std::ifstream route("/proc/net/route");
+
+    std::string line;
+
+    while (std::getline(route, line)) {
+
+        if (line.find(interface) != std::string::npos && line.find("00000000") != std::string::npos) {
+
+            std::string gatewayHex = line.substr(line.find("00000000") + 9, 8);
+
+            unsigned long gw = std::stoul(gatewayHex, nullptr, 16);
+
+            struct in_addr gw_addr = { htonl(gw) };
+
+            char gw_ip[INET_ADDRSTRLEN];
+
+            inet_ntop(AF_INET, &gw_addr, gw_ip, INET_ADDRSTRLEN);
+
+            gateway = std::string(gw_ip);
+
+            std::cout << "Default Gateway: " << gateway << std::endl;
+
+            break;
+
+        }
+
+    }
+
+
+
+    // Get DNS Servers
+
+    std::ifstream resolv("/etc/resolv.conf");
+
+    while (std::getline(resolv, line)) {
+
+        if (line.find("nameserver") == 0) {
+
+            std::cout << "DNS Servers: " << line.substr(11) << std::endl;
+
+        }
+
+    }
+
+}
 
 
 
