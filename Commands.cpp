@@ -504,7 +504,7 @@ Command* SmallShell::CreateCommand(const char* cmd_line) {
 
  
   // command includes alias and ' so it is an alias command.
-  if(strstr(temp, "alias") != nullptr && strstr(temp, "'") != nullptr) {
+  if(firstword == "alias" && strstr(temp, "'") != nullptr) {
 	return new aliasCommand(temp);
   }
 
